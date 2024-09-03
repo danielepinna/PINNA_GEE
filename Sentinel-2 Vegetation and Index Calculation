@@ -1,0 +1,317 @@
+// Import study area and center the map
+var borders = table;
+Map.centerObject(borders);
+
+//-----------------------------------------------------------------------------------
+// Set up basic variables
+//-----------------------------------------------------------------------------------
+var image_collection = "COPERNICUS/S2_SR_HARMONIZED" //image collection.
+var min_v            = 0.1
+var max_v            = 0.9
+//var borders=borders.buffer(-5);
+//
+//-----------------------------------------------------------------------------------
+// Prepare palette for image display     
+var palette = ['FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
+              '74A901', '66A000', '529400', '3E8601', '207401', '056201',
+              '004C00', '023B01', '012E01', '011D01', '011301'];
+              //palette for index image on GEE.
+
+//S2 CloudMask
+function maskS2clouds(image) {
+  var qa = image.select('QA60');
+
+  // Bits 10 and 11 are clouds and cirrus, respectively.
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  return image.updateMask(mask).divide(10000);
+}
+
+// Load Image Collection (SENTINEL2)
+var S2_fil = ee.ImageCollection(image_collection)
+            .filterDate('2020-08-01', '2020-08-10')
+            .filterBounds(borders)
+            .map(maskS2clouds)
+            .map(function(image){return image.clip(borders)}) ;
+
+print(S2_fil);
+
+
+//Image Expression for calculating Vegetation Indices
+//Normalized Difference Water Index (NDWI)
+var addNDWI = function(image) {
+      var NDWI = image.expression(
+      '(B3-B8)/(B3+B8)',
+      {
+        'B3': image.select('B3'),
+        'B8': image.select('B8'),
+ 
+      }).rename('NDWI');
+      //NDWI index
+      return image.addBands(NDWI);
+      //Add 0.0 value to index (currently not in use)
+};
+//Normalized Difference Vegetation Index (NDVI)
+var addNDVI = function(image) {
+      var NDVI = image.expression(
+      '(B8-B4)/(B8+B4)',
+      {
+        'B8': image.select('B8'),
+        'B4': image.select('B4'),
+ 
+      }).rename('NDVI');
+      //NDVI index
+      return image.addBands(NDVI);
+      //Add 0.0 value to index (currently not in use)
+};
+
+//Enhanced Vegetation Index (EVI)
+var addEVI = function(image) {
+      var EVI = image.expression(
+      '2.5*(B8-B4)/((B8+6*B4-7.5*B2)+1)',
+      {
+        'B2': image.select('B2'),
+        'B4': image.select('B4'),
+        'B8': image.select('B8'),
+ 
+      }).rename('EVI');
+      //EVI index
+      return image.addBands(EVI);
+};
+
+//Green Normalized Difference Vegetation Index (GNDVI)
+var addGNDVI = function(image) {
+      var GNDVI = image.expression(
+      '(B8-B3)/(B8+B3)',
+      {
+        'B8': image.select('B8'),
+        'B3': image.select('B3'),
+ 
+      }).rename('GNDVI');
+      //NDVI index
+      return image.addBands(GNDVI);
+      //Add 0.0 value to index (currently not in use)
+};
+
+//Leaf Area Index (LAI)
+var addLAI = function(image) {
+      var LAI = image.expression(
+      '3.618*(2.5*(B8-B4)/((B8+6*B4-7.5*B2)+1))-0.118',
+      {
+        'B8': image.select('B8'),
+        'B4': image.select('B4'),
+        'B2': image.select('B2'),
+ 
+      }).rename('LAI');
+      //NDVI index
+      return image.addBands(LAI);
+      //Add 0.0 value to index (currently not in use)
+};
+
+//Normalized Difference Red-Edge Index (NDRE)
+var addNDRE = function(image) {
+      var NDRE = image.expression(
+      '(B9-B5)/(B9+B5)',
+      {
+        'B9': image.select('B9'),
+        'B5': image.select('B5'),
+ 
+      }).rename('NDRE');
+      //NDRE index
+      return image.addBands(NDRE);
+};
+
+//Canopy Chlorophyll Content Index (CCCI)
+var addCCCI = function(image) {
+      var CCCI = image.expression(
+      '((B9-B5)/(B9+B5))/((9-4)/(9+4))',
+      {
+        'B9': image.select('B9'),
+        'B5': image.select('B5'),
+        'B4': image.select('B4'),
+ 
+      }).rename('CCCI');
+      //CCCI index
+      return image.addBands(CCCI);
+};
+
+//Chlorophyl Green Index (CGE)
+var addCG = function(image) {
+      var CG = image.expression(
+      '(B7/B3)**(-1)',
+      {
+        'B7': image.select('B7'),
+        'B3': image.select('B3'),
+ 
+      }).rename('CG');
+      //CG index
+      return image.addBands(CG);
+};
+
+//Chlorophyl Red Edge Index (CRE)
+var addCRE = function(image) {
+      var CRE = image.expression(
+      '(B7/B5)**(-1)',
+      {
+        'B7': image.select('B7'),
+        'B5': image.select('B5'),
+ 
+      }).rename('CRE');
+      //CRE index
+      return image.addBands(CRE);
+};
+
+
+
+
+//Three Bands Dall'Olmo Index (DO)
+var addDO = function(image) {
+      var DO = image.expression(
+      'B8A*((1/B7)-(1/B6))',
+      {
+        'B7': image.select('B7'),
+        'B6': image.select('B6'),
+        'B8A': image.select('B8A'),
+      }).rename('DO');
+      //DO index
+      return image.addBands(DO);
+};
+
+//Normalized area over reflectance curve (NAOC)
+var addNAOC = function(image) {
+      var NAOC = image.expression(
+      '1-((40*B4+35*B5+43*B6)/(118*B7))',
+      {
+        'B7': image.select('B7'),
+        'B6': image.select('B6'),
+        'B4': image.select('B4'),
+        'B5': image.select('B5'),
+      }).rename('NAOC');
+      //NAOC index
+      return image.addBands(NAOC);
+};
+
+
+//Normalized Difference Tillage Index (NDTI)
+var addNDTI = function(image) {
+      var NDTI = image.expression(
+      '(B11-B12)/(B11+B12)',
+      {
+        'B11': image.select('B11'),
+        'B12': image.select('B12'),
+ 
+      }).rename('NDTI');
+      //NDTI index
+      return image.addBands(NDTI);
+      //Add 0.0 value to index (currently not in use)
+};
+
+
+//Three band Index 1 (TB1)
+var addTB1 = function(image) {
+      var TB1 = image.expression(
+      'B2/(B8+B4)',
+      {
+        'B2': image.select('B2'),
+        'B4': image.select('B4'),
+        'B8': image.select('B8'),
+ 
+      }).rename('TB1');
+      //TB1 index
+      return image.addBands(TB1);
+};
+
+
+//Three band Index 2 (TB2)
+var addTB2 = function(image) {
+      var TB2 = image.expression(
+      'B6/(B4+B7)',
+      {
+        'B6': image.select('B6'),
+        'B4': image.select('B4'),
+        'B7': image.select('B7'),
+ 
+      }).rename('TB2');
+      //TB2 index
+      return image.addBands(TB2);
+};
+
+
+// Calculate indexes for images in the Image collection 
+var S2_index1= ee.ImageCollection(S2_fil).map(addNDWI).map(addNDVI).map(addGNDVI).map(addEVI).map(addLAI).map(addNDRE).map(addCCCI).map(addCG).map(addCRE).map(addDO).map(addNAOC).map(addNDTI).map(addTB1).map(addTB2);
+
+
+var EVI= S2_index1.select("EVI")
+var NDVI=  S2_index1.select("NDVI")
+var GNDVI=  S2_index1.select("GNDVI")
+var NDWI=  S2_index1.select("NDWI")
+var LAI=  S2_index1.select("LAI")
+var NDRE=  S2_index1.select("NDRE")
+var CCCI=  S2_index1.select("CCCI")
+var CG=  S2_index1.select("CG")
+var CRE=  S2_index1.select("CRE")
+var DO=  S2_index1.select("DO")
+var NAOC=  S2_index1.select("NAOC")
+var NDTI=  S2_index1.select("NDTI")
+var TB1=  S2_index1.select("TB1")
+var TB2=  S2_index1.select("TB2")
+
+var EVI=  ee.Image(EVI.mean())
+var NDVI=  ee.Image(NDVI.mean())
+var GNDVI=  ee.Image(GNDVI.mean())
+var NDWI=  ee.Image(NDWI.mean())
+var LAI=  ee.Image(LAI.mean())
+var NDRE=  ee.Image(NDRE.mean())
+var CCCI=  ee.Image(CCCI.mean())
+var CG=  ee.Image(CG.mean())
+var DO=  ee.Image(DO.mean())
+var NAOC=  ee.Image(NAOC.mean())
+var NDTI=  ee.Image(NDTI.mean())
+var TB1=  ee.Image(TB1.mean())
+var TB2=  ee.Image(TB2.mean())
+var CRE=  ee.Image(CRE.mean())
+
+Map.addLayer(EVI, {min: min_v, max: max_v, palette: palette}, 'EVI', 1, 0.85);
+Map.addLayer(NDVI, {min: min_v, max: max_v, palette: palette}, 'NDVI', 1, 0.85);
+Map.addLayer(GNDVI, {min: min_v, max: max_v, palette: palette}, 'GNDVI', 1, 0.85);
+Map.addLayer(NDWI, {min: 0, max: 0.5,palette: palette}, 'NDWI', 1, 0.85);
+Map.addLayer(LAI, {min: min_v, max: max_v, palette: palette}, 'LAI')
+Map.addLayer(NDRE, {min: min_v, max: max_v, palette: palette}, 'NDRE')
+Map.addLayer(CCCI, {min: min_v, max: max_v, palette: palette}, 'CCCI')
+Map.addLayer(CG, {min: min_v, max: max_v, palette: palette}, 'CG')
+Map.addLayer(CRE, {min: min_v, max: max_v, palette: palette}, 'CRE')
+
+
+
+var finalimage = EVI.addBands(NDVI)
+                    .addBands(GNDVI)
+                    .addBands(NDWI)
+                    .addBands(LAI)
+                    .addBands(NDRE)
+                    .addBands(CCCI)
+                    .addBands(CG)
+                    .addBands(CRE)
+                    .addBands(DO)
+                    .addBands(NAOC)
+                    .addBands(NDTI)
+                    .addBands(TB1)
+                    .addBands(TB2)
+                    .clip(borders)
+                    
+print(finalimage)
+
+
+Export.image.toDrive({
+  image: finalimage.toFloat(),
+  description: 'Filename',
+  scale: 10,
+  crs:'EPSG:32632', // Choose the most appropriate EPSG for your region
+  region: borders,
+  maxPixels: 1000000000,
+  fileFormat: 'GeoTIFF',});
+

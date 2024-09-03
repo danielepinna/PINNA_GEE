@@ -1,0 +1,133 @@
+This script offer the possibility to extract monthly Time Series of MODIS NDVI and EVI, Topographical features (from NASADEM 30m) and Meteorological variables (from ECMWF).
+The output is a csv, where the rows are your features (polygons or points imported as shp) and columns have monthly values of the abovementioned variables. 
+
+// Load your polygons or points 
+var polygons = table;
+
+// NASA DEM: Define the function to add mean elevation, slope, and aspect
+var addTerrainMetrics = function(feature) {
+  var dem = ee.Image("NASA/NASADEM_HGT/001");
+  var slope = ee.Terrain.slope(dem);
+  var aspect = ee.Terrain.aspect(dem);
+  
+  var meanElev = dem.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: feature.geometry(),
+    scale: 30
+  }).get('elevation');
+  
+  var meanSlope = slope.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: feature.geometry(),
+    scale: 30
+  }).get('slope');
+  
+  var meanAspect = aspect.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: feature.geometry(),
+    scale: 30
+  }).get('aspect');
+  
+  return feature
+    .set('meanElevation', meanElev)
+    .set('meanSlope', meanSlope)
+    .set('meanAspect', meanAspect);
+};
+
+var aggregateMODIS = function(feature) {
+  var modis = ee.ImageCollection("MODIS/061/MOD13Q1");
+  var updatedFeature = feature; // Initialize an updated feature to accumulate results
+  
+  for (var year = 2001; year <= 2023; year++) {
+    for (var month = 1; month <= 12; month++) {
+      var start = ee.Date.fromYMD(year, month, 1);
+      var end = start.advance(1, 'month');
+      
+      var filtered = modis.filterDate(start, end).mean();
+      
+      var ndvi = filtered.select('NDVI').reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: updatedFeature.geometry(),
+        scale: 250
+      }).get('NDVI');
+      
+      var evi = filtered.select('EVI').reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: updatedFeature.geometry(),
+        scale: 250
+      }).get('EVI');
+      
+      updatedFeature = updatedFeature
+        .set(ee.String('NDVI_').cat(ee.Number(year).format()).cat('_').cat(ee.Number(month).format()), ndvi)
+        .set(ee.String('EVI_').cat(ee.Number(year).format()).cat('_').cat(ee.Number(month).format()), evi);
+    }
+  }
+  
+  return updatedFeature;
+};
+
+var aggregateECMWF = function(feature) {
+  var ecmwf = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR");
+  var updatedFeature = feature; // Initialize an updated feature to accumulate results
+  
+  for (var year = 2002; year <= 2023; year++) {
+    for (var month = 1; month <= 12; month++) {
+      var start = ee.Date.fromYMD(year, month, 1);
+      var end = start.advance(1, 'month');
+      
+      var filtered = ecmwf.filterDate(start, end).mean();
+      
+      var precipitation = filtered.select('total_precipitation_sum').reduceRegion({
+        reducer: ee.Reducer.sum(),
+        geometry: updatedFeature.geometry(),
+        scale: 1000,
+        maxPixels: 1e9
+      }).get('total_precipitation_sum');
+      
+      var airTemp = filtered.select('temperature_2m').reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: updatedFeature.geometry(),
+        scale: 1000,
+        maxPixels: 1e9
+      }).get('temperature_2m');
+      
+       var Rad = filtered.select('surface_net_solar_radiation_sum').reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: updatedFeature.geometry(),
+        scale: 1000,
+        maxPixels: 1e9
+      }).get('surface_net_solar_radiation_sum');
+      
+      var Snow = filtered.select('snowfall_sum').reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: updatedFeature.geometry(),
+        scale: 1000,
+        maxPixels: 1e9
+      }).get('snowfall_sum');
+      
+      updatedFeature = updatedFeature
+        .set(ee.String('Precipitation_').cat(ee.Number(year).format()).cat('_').cat(ee.Number(month).format()), precipitation)
+        .set(ee.String('AirTemp_').cat(ee.Number(year).format()).cat('_').cat(ee.Number(month).format()), airTemp)
+        .set(ee.String('Snow_').cat(ee.Number(year).format()).cat('_').cat(ee.Number(month).format()), Snow)
+        .set(ee.String('NetRad_').cat(ee.Number(year).format()).cat('_').cat(ee.Number(month).format()), Rad);
+    }
+  }
+  
+  return updatedFeature;
+};
+
+
+
+// Sequentially apply all functions to the polygons, ensuring all metrics are included
+var processedPolygons = polygons
+  .map(addTerrainMetrics) // First, add elevation, slope, aspect
+  .map(aggregateMODIS)    // Then, add NDVI and EVI
+  .map(aggregateECMWF);   // Finally, add precipitation and air temperature
+
+// Export the processed polygons with all metrics as a CSV
+Export.table.toDrive({
+  collection: processedPolygons,
+  description: 'polygon_data',
+  fileFormat: 'CSV'
+});
+print(processedPolygons)

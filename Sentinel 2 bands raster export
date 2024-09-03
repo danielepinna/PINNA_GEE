@@ -1,0 +1,54 @@
+var borders = table;
+Map.centerObject(borders);
+//-----------------------------------------------------------------------------------
+// Set up basic variables
+//-----------------------------------------------------------------------------------
+var image_collection = "COPERNICUS/S2_SR_HARMONIZED" //image collection.
+var min_v            = 0.1
+var max_v            = 0.9
+//var borders=borders.buffer(-5);
+//
+//-----------------------------------------------------------------------------------
+// Prepare palette for image display     
+var palette = ['FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
+              '74A901', '66A000', '529400', '3E8601', '207401', '056201',
+              '004C00', '023B01', '012E01', '011D01', '011301'];
+              //palette for index image on GEE.
+
+//S2 CloudMask
+function maskS2clouds(image) {
+  var qa = image.select('QA60');
+
+  // Bits 10 and 11 are clouds and cirrus, respectively.
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  return image.updateMask(mask).divide(10000);
+}
+
+// Load raster data (SENTINEL2)..
+var S2_fil = ee.ImageCollection(image_collection)
+            .filterDate('2020-08-01', '2020-08-11') // Choose the period of your interest
+            .filterBounds(borders)
+            .map(maskS2clouds)
+print(S2_fil);
+
+var image = ee.Image(S2_fil.first()); // If you have already filtered it to one image, you can skip this step.
+
+// Select the 10 bands you need from the image.
+var finalimage = image.select(['B2','B3','B4','B5','B6','B7','B8','B8A','B11','B12']);
+print(finalimage)
+
+
+Export.image.toDrive({
+  image: finalimage.toFloat(),
+  description: 'Filename',
+  scale: 10,
+  crs:'EPSG:32632', // Choose the most appropriate EPSG for your region
+  region: borders,
+  maxPixels: 1000000000,
+  fileFormat: 'GeoTIFF',});

@@ -1,6 +1,5 @@
-- 👋 Hi, I’m @danielepinna, PhD student in Land, Environment, Resources and Health at the university of Padua
-- 👀 I’m interested in Geospatial analysis, Remote Sensing, Image Analysis
-- 📫 How to reach me daniele.pinna@phd.unipd.it
+- 👋 Hi, I’m @danielepinna, PhD student in Land, Environment, Resources and Health at the University of Padua
+- This repository contains some of the Google Earth Engine script I developed, I'm open to suggestions, improvements and help. 
 
 <!---
 danielepinna/danielepinna is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
